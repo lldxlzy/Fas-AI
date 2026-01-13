@@ -497,9 +497,6 @@ ${content}
                 .replace(/:\s*'([^']*)'/g, ':"$1"')        // 单引号值改双引号
                 .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // key加引号
                 .replace(/:\s*undefined/g, ': null')       // undefined改null
-                .replace(/:\s*true\b/g, ': true')
-                .replace(/:\s*false\b/g, ': false')
-                .replace(/:\s*null\b/g, ': null')
                 .replace(/\n/g, ' ')                       // 换行改空格
                 .replace(/\s+/g, ' ');                     // 多个空格改单个空格
             
@@ -521,15 +518,18 @@ ${content}
             } catch (error) {
                 console.error('JSON 解析失败:', error);
                 console.error('尝试解析的JSON:', jsonStr);
+                
                 // 尝试手动修复并重新解析
                 try {
                     const fixedJson = attemptRepairJSON(jsonStr);
                     console.log('修复后的JSON:', fixedJson);
                     const data = JSON.parse(fixedJson);
                     validateAndCleanNode(data);
+                    console.log('修复成功！');
                     return data;
                 } catch (repairError) {
-                    throw new Error(`JSON 格式错误: ${error.message}`);
+                    console.error('修复失败:', repairError);
+                    throw new Error(`JSON 无法解析: ${error.message}`);
                 }
             }
         }
@@ -537,13 +537,16 @@ ${content}
         function attemptRepairJSON(jsonStr) {
             let repaired = jsonStr;
             
-            // 修复多余的闭合括号 (如 }})
-            repaired = repaired.replace(/([}\]])\s*\1+/g, '$1');
+            // 第一步：移除多余的右括号/右方括号
+            // 策略：从右到左扫描，当遇到不匹配的括号时删除
+            repaired = balanceBrackets(repaired);
             
-            // 修复 }] 后面多余的 }
-            repaired = repaired.replace(/(\])\s*\}/g, '}');
+            // 第二步：清理常见的格式错误
+            // 移除 }} 改为 }
+            repaired = repaired.replace(/\}\}\s*\]/g, '}]');
+            repaired = repaired.replace(/\}\}\s*\}/g, '}');
             
-            // 修复未闭合的字符串
+            // 第三步：修复未闭合的字符串
             let quoteCount = 0;
             for (let i = 0; i < repaired.length; i++) {
                 if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
@@ -554,18 +557,54 @@ ${content}
                 repaired += '"';
             }
             
-            // 修复未闭合的括号
-            let braceCount = (repaired.match(/{/g) || []).length - (repaired.match(/}/g) || []).length;
-            for (let i = 0; i < braceCount; i++) {
-                repaired += '}';
-            }
+            // 第四步：最后再次平衡括号
+            repaired = balanceBrackets(repaired);
             
-            let bracketCount = (repaired.match(/\[/g) || []).length - (repaired.match(/\]/g) || []).length;
-            for (let i = 0; i < bracketCount; i++) {
-                repaired += ']';
-            }
-            
+            console.log('修复步骤后:', repaired);
             return repaired;
+        }
+        
+        function balanceBrackets(str) {
+            // 计算括号数量
+            let braces = 0;
+            let brackets = 0;
+            let result = '';
+            
+            for (let i = 0; i < str.length; i++) {
+                const char = str[i];
+                
+                if (char === '{') {
+                    braces++;
+                    result += char;
+                } else if (char === '}') {
+                    if (braces > 0) {
+                        braces--;
+                        result += char;
+                    }
+                    // 否则跳过这个多余的 }
+                } else if (char === '[') {
+                    brackets++;
+                    result += char;
+                } else if (char === ']') {
+                    if (brackets > 0) {
+                        brackets--;
+                        result += char;
+                    }
+                    // 否则跳过这个多余的 ]
+                } else {
+                    result += char;
+                }
+            }
+            
+            // 补全未闭合的括号
+            for (let i = 0; i < braces; i++) {
+                result += '}';
+            }
+            for (let i = 0; i < brackets; i++) {
+                result += ']';
+            }
+            
+            return result;
         }
         
         function validateAndCleanNode(node) {
