@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 课堂知识点思维导图工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            height: 90vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: #f8f9fa;
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+        }
+
+        .canvas-container {
+            flex: 1;
+            background: #fafafa;
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+            max-height: 200px;
+        }
+
+        .form-group textarea:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .btn-small {
+            padding: 8px 12px;
+            font-size: 12px;
+            flex: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .controls button {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+        }
+
+        .mind-info {
+            background: #f0f0f0;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <h2 style="margin-bottom: 30px; color: #333;">思维导图生成器</h2>
+
+            <div id="apiKeyForm" style="margin-bottom: 30px; padding: 12px; background: #e8f5e9; border-radius: 6px; color: #2e7d32;">
+                <strong>✅ 本地 Ollama 模式</strong>
+                <p style="font-size: 12px; margin-top: 8px;">使用本地 Qwen 模型，无需 API Key</p>
+            </div>
+
+            <form id="inputForm">
+                <div class="form-group">
+                    <label for="subject">课程科目</label>
+                    <input type="text" id="subject" placeholder="例：高中数学、初中英语" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="topic">知识点主题</label>
+                    <input type="text" id="topic" placeholder="例：三角函数基础" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="content">课程内容描述</label>
+                    <textarea id="content" placeholder="详细描述要梳理的课程内容，包括主要概念、定义、公式等..." required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="depth">思维导图深度</label>
+                    <select id="depth" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="2">简洁版（2层）</option>
+                        <option value="3" selected>标准版（3层）</option>
+                        <option value="4">详细版（4层）</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn-primary" id="generateBtn">
+                        🤖 生成思维导图
+                    </button>
+                </div>
+
+                <div id="messageContainer"></div>
+            </form>
+
+            <div class="controls">
+                <button class="btn-secondary btn-small" id="exportPng">📥 导出PNG</button>
+                <button class="btn-secondary btn-small" id="exportJson">💾 导出JSON</button>
+            </div>
+
+            <div class="mind-info" id="mindInfo">
+                等待输入课程内容...
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <div class="header">
+                <h1>思维导图可视化</h1>
+                <div style="font-size: 14px; opacity: 0.9;" id="status">准备就绪</div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="mindmapCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 配置 ==========
+        const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
+        const MODEL_NAME = 'Qwen';
+
+        // ========== 全局变量 ==========
+        let mindmapData = null;
+        let canvas = null;
+        let ctx = null;
+
+        // ========== 初始化 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            canvas = document.getElementById('mindmapCanvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            document.getElementById('inputForm').addEventListener('submit', handleGenerate);
+            document.getElementById('exportPng').addEventListener('click', exportPNG);
+            document.getElementById('exportJson').addEventListener('click', exportJSON);
+
+            // 检查 Ollama 连接
+            checkOllamaConnection();
+        });
+
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            if (mindmapData) {
+                drawMindmap(mindmapData);
+            }
+        }
+
+        // ========== 检查 Ollama 连接 ==========
+        async function checkOllamaConnection() {
+            try {
+                const response = await fetch('http://localhost:11434/api/tags');
+                if (response.ok) {
+                    updateStatus('✅ Ollama 已连接');
+                } else {
+                    updateStatus('⚠️ Ollama 未响应');
+                }
+            } catch (error) {
+                updateStatus('❌ 请启动 Ollama: ollama serve');
+                showMessage('❌ Ollama 服务未启动。请在终端运行: <br><code>ollama serve</code>', 'error');
+            }
+        }
+
+        // ========== AI 生成 ==========
+        async function handleGenerate(e) {
+            e.preventDefault();
+
+            const subject = document.getElementById('subject').value.trim();
+            const topic = document.getElementById('topic').value.trim();
+            const content = document.getElementById('content').value.trim();
+            const depth = document.getElementById('depth').value;
+
+            if (!subject || !topic || !content) {
+                showMessage('请填写所有必填项', 'error');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            generateBtn.disabled = true;
+            showMessage(
+                '<div class="spinner"></div>AI 正在生成思维导图，请稍候（首次运行可能较慢）...',
+                'loading'
+            );
+            updateStatus('正在调用本地 Qwen...');
+
+            try {
+                const prompt = buildPrompt(subject, topic, content, depth);
+                const result = await callOllamaAPI(prompt);
+                
+                mindmapData = parseAIResponse(result);
+                drawMindmap(mindmapData);
+                
+                showMessage('✅ 思维导图生成成功！', 'success');
+                updateStatus('已生成思维导图');
+                updateMindInfo(mindmapData);
+            } catch (error) {
+                showMessage(`❌ 错误: ${error.message}`, 'error');
+                updateStatus('生成失败');
+                console.error(error);
+            } finally {
+                generateBtn.disabled = false;
+            }
+        }
+
+        function buildPrompt(subject, topic, content, depth) {
+            return `你是一个教学专家，请根据以下课程内容生成一个JSON格式的思维导图。
+
+【课程信息】
+科目: ${subject}
+主题: ${topic}
+深度: ${depth}层
+
+【课程内容】
+${content}
+
+请生成一个有${depth}层的思维导图JSON结构。返回纯JSON，不要有markdown代码块。JSON格式如下：
+{
+  "title": "主题名称",
+  "children": [
+    {
+      "title": "一级分支1",
+      "children": [
+        {"title": "二级分支1-1"},
+        {"title": "二级分支1-2"}
+      ]
+    },
+    {
+      "title": "一级分支2",
+      "children": [
+        {"title": "二级分支2-1"}
+      ]
+    }
+  ]
+}
+
+要求：
+1. 内容准确、专业、符合教学逻辑
+2. 分支数量：一级3-5个，每个一级下有2-4个二级
+3. ${depth === '4' ? '如果是4层，二级下还有2-3个三级分支' : ''}
+4. 标题简洁明了，易于理解
+5. 只返回JSON，无需其他文字`;
+        }
+
+        async function callOllamaAPI(prompt) {
+            const response = await fetch(OLLAMA_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME,
+                    prompt: prompt,
+                    stream: false,
+                    temperature: 0.7,
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Ollama 连接失败: ${response.status}。请确保运行了 "ollama serve"`);
+            }
+
+            const data = await response.json();
+            return data.response;
+        }
+
+        function parseAIResponse(text) {
+            try {
+                // 移除可能的 markdown 代码块
+                let jsonStr = text.trim();
+                if (jsonStr.startsWith('```json')) {
+                    jsonStr = jsonStr.replace(/^```json\n/, '').replace(/\n```$/, '');
+                } else if (jsonStr.startsWith('```')) {
+                    jsonStr = jsonStr.replace(/^```\n/, '').replace(/\n```$/, '');
+                }
+                return JSON.parse(jsonStr);
+            } catch (e) {
+                throw new Error('AI 响应格式错误，无法解析');
+            }
+        }
+
+        // ========== 绘制思维导图 ==========
+        function drawMindmap(data) {
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // 清空画布
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, width, height);
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const rootRadius = 60;
+
+            // 绘制根节点
+            drawNode(centerX, centerY, data.title, rootRadius, true);
+
+            if (data.children && data.children.length > 0) {
+                const branchCount = data.children.length;
+                const angleStep = (2 * Math.PI) / branchCount;
+                const level1Distance = 180;
+
+                data.children.forEach((child, index) => {
+                    const angle = angleStep * index - Math.PI / 2;
+                    const x = centerX + Math.cos(angle) * level1Distance;
+                    const y = centerY + Math.sin(angle) * level1Distance;
+
+                    // 绘制连线
+                    drawLine(centerX, centerY, x, y);
+                    drawNode(x, y, child.title, 50);
+
+                    // 绘制二级分支
+                    if (child.children && child.children.length > 0) {
+                        const subBranchCount = child.children.length;
+                        const subAngleStep = (Math.PI * 0.8) / (subBranchCount + 1);
+
+                        child.children.forEach((subChild, subIndex) => {
+                            const baseAngle = angle;
+                            const offsetAngle = -Math.PI * 0.4 + subAngleStep * (subIndex + 1);
+                            const subAngle = baseAngle + offsetAngle;
+                            const subDistance = 140;
+
+                            const sx = x + Math.cos(subAngle) * subDistance;
+                            const sy = y + Math.sin(subAngle) * subDistance;
+
+                            drawLine(x, y, sx, sy, true);
+                            drawNode(sx, sy, subChild.title, 40, false, true);
+
+                            // 绘制三级分支
+                            if (subChild.children && subChild.children.length > 0) {
+                                drawThirdLevel(sx, sy, subChild.children, subAngle);
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        function drawThirdLevel(x, y, children, parentAngle) {
+            const childCount = children.length;
+            const angleStep = (Math.PI * 0.6) / (childCount + 1);
+
+            children.forEach((child, index) => {
+                const offsetAngle = -Math.PI * 0.3 + angleStep * (index + 1);
+                const angle = parentAngle + offsetAngle;
+                const distance = 100;
+
+                const cx = x + Math.cos(angle) * distance;
+                const cy = y + Math.sin(angle) * distance;
+
+                drawLine(x, y, cx, cy, true);
+                drawNode(cx, cy, child.title, 32, false, true);
+            });
+        }
+
+        function drawNode(x, y, text, radius, isRoot = false, isSmall = false) {
+            // 绘制圆形背景
+            ctx.fillStyle = isRoot ? '#667eea' : (isSmall ? '#e8f0fe' : '#f0f7ff');
+            ctx.strokeStyle = isRoot ? '#764ba2' : '#667eea';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            // 绘制文本
+            ctx.fillStyle = isRoot ? '#fff' : '#333';
+            ctx.font = `bold ${isSmall ? '11px' : '13px'} 'Segoe UI', sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 文本换行
+            const words = text.split('');
+            const maxWidth = radius * 1.8;
+            const lines = wrapText(text, maxWidth);
+            const lineHeight = 14;
+            const startY = y - (lines.length - 1) * lineHeight / 2;
+
+            lines.forEach((line, i) => {
+                ctx.fillText(line, x, startY + i * lineHeight);
+            });
+        }
+
+        function wrapText(text, maxWidth) {
+            if (ctx.measureText(text).width <= maxWidth) {
+                return [text];
+            }
+            
+            const lines = [];
+            let currentLine = '';
+            
+            for (let char of text) {
+                const testLine = currentLine + char;
+                if (ctx.measureText(testLine).width > maxWidth) {
+                    if (currentLine) lines.push(currentLine);
+                    currentLine = char;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            if (currentLine) lines.push(currentLine);
+            return lines;
+        }
+
+        function drawLine(x1, y1, x2, y2, isDashed = false) {
+            ctx.strokeStyle = isDashed ? '#ddd' : '#bbb';
+            ctx.lineWidth = isDashed ? 1 : 2;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        // ========== 导出功能 ==========
+        function exportPNG() {
+            if (!mindmapData) {
+                showMessage('请先生成思维导图', 'error');
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = `思维导图_${new Date().getTime()}.png`;
+            link.click();
+            showMessage('✅ PNG 导出成功', 'success');
+        }
+
+        function exportJSON() {
+            if (!mindmapData) {
+                showMessage('请先生成思维导图', 'error');
+                return;
+            }
+
+            const dataStr = JSON.stringify(mindmapData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `思维导图_${new Date().getTime()}.json`;
+            link.click();
+            showMessage('✅ JSON 导出成功', 'success');
+        }
+
+        // ========== UI 辅助函数 ==========
+        function showMessage(html, type) {
+            const container = document.getElementById('messageContainer');
+            let className = type === 'error' ? 'error-message' : 
+                           type === 'success' ? 'success-message' : 'loading';
+            container.innerHTML = `<div class="${className}">${html}</div>`;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 3000);
+            }
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function updateMindInfo(data) {
+            let info = `✅ 已生成\n主题: ${data.title}\n`;
+            
+            const countNodes = (node) => {
+                let count = 1;
+                if (node.children) {
+                    count += node.children.reduce((sum, child) => sum + countNodes(child), 0);
+                }
+                return count;
+            };
+            
+            const totalNodes = countNodes(data);
+            info += `节点总数: ${totalNodes}`;
+            
+            document.getElementById('mindInfo').textContent = info;
+        }
+    </script>
+</body>
+</html>
