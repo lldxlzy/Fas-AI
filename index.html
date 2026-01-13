@@ -330,7 +330,7 @@
         // ========== 检查 Ollama 连接 ==========
         async function checkOllamaConnection() {
             try {
-                const response = await fetch('http://localhost:11434/api/tags');
+                const response = await fetch('https://special-lamp-r47qx64jjpgj2577g-11434.app.github.dev/api/tags');
                 if (response.ok) {
                     updateStatus('✅ Ollama 已连接');
                 } else {
