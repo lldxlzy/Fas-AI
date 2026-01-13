@@ -384,7 +384,7 @@
         }
 
         function buildPrompt(subject, topic, content, depth) {
-            return `你是一个教学专家，请根据以下课程内容生成一个JSON格式的思维导图。
+            return `你是一个教学专家，根据以下课程内容生成一个思维导图的JSON结构。
 
 【课程信息】
 科目: ${subject}
@@ -394,32 +394,47 @@
 【课程内容】
 ${content}
 
-请生成一个有${depth}层的思维导图JSON结构。返回纯JSON，不要有markdown代码块。JSON格式如下：
+【任务要求】
+生成一个嵌套的JSON对象，代表${depth}层的思维导图结构。
+
+【JSON格式示例】
 {
-  "title": "主题名称",
+  "title": "细胞的基本结构",
   "children": [
     {
-      "title": "一级分支1",
+      "title": "细胞膜",
       "children": [
-        {"title": "二级分支1-1"},
-        {"title": "二级分支1-2"}
+        {"title": "选择透过性"},
+        {"title": "控制物质进出"}
       ]
     },
     {
-      "title": "一级分支2",
+      "title": "细胞核",
       "children": [
-        {"title": "二级分支2-1"}
+        {"title": "含有DNA"},
+        {"title": "遗传信息储存"}
+      ]
+    },
+    {
+      "title": "细胞质",
+      "children": [
+        {"title": "线粒体"},
+        {"title": "叶绿体"}
       ]
     }
   ]
 }
 
-要求：
-1. 内容准确、专业、符合教学逻辑
-2. 分支数量：一级3-5个，每个一级下有2-4个二级
-3. ${depth === '4' ? '如果是4层，二级下还有2-3个三级分支' : ''}
-4. 标题简洁明了，易于理解
-5. 只返回JSON，无需其他文字`;
+【生成规则】
+1. 必须返回有效的JSON格式，不要有任何markdown代码块或额外文字
+2. 根节点title是主题名称
+3. 一级children数组包含3-5个对象
+4. 每个一级对象都必须有title和children字段
+5. 二级children数组包含2-4个对象
+6. ${depth === '4' ? '三级children数组包含2-3个对象' : '不需要三级'}
+7. 最后一层的对象可以没有children字段
+8. 所有文本简洁明了，符合教学逻辑
+9. 只输出JSON，无其他内容`;
         }
 
         async function callOllamaAPI(prompt) {
@@ -459,38 +474,69 @@ ${content}
         }
 
         function parseAIResponse(text) {
-            // 移除 markdown 代码块
-            text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+            console.log('原始AI响应:', text);
             
-            // 尝试提取 JSON 对象
-            const jsonMatch = text.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-                throw new Error('未找到 JSON 对象');
+            // 移除 markdown 代码块
+            text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            
+            // 尝试提取第一个 { 和最后一个 }
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
+            
+            if (firstBrace === -1 || lastBrace === -1) {
+                throw new Error('未找到有效的 JSON 对象');
             }
             
-            let jsonStr = jsonMatch[0];
+            let jsonStr = text.substring(firstBrace, lastBrace + 1);
+            console.log('提取的JSON:', jsonStr);
             
             // 清理常见的 JSON 格式错误
             jsonStr = jsonStr
-                .replace(/,\s*}/g, '}')           // 移除末尾多余逗号
-                .replace(/,\s*]/g, ']')           // 移除数组末尾多余逗号
-                .replace(/:\s*'/g, ':"')          // 单引号改双引号（值）
-                .replace(/'\s*,/g, '",')          // 单引号改双引号（值后逗号）
-                .replace(/'\s*}/g, '"}')          // 单引号改双引号（值后花括号）
-                .replace(/:\s*undefined/g, ': null')  // undefined 改 null
-                .replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');  // 未加引号的 key 加引号
+                .replace(/,\s*}/g, '}')                    // 移除末尾逗号
+                .replace(/,\s*]/g, ']')                    // 移除数组末尾逗号
+                .replace(/:\s*'([^']*)'/g, ':"$1"')        // 单引号值改双引号
+                .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // key加引号
+                .replace(/:\s*undefined/g, ': null')       // undefined改null
+                .replace(/:\s*true\b/g, ': true')
+                .replace(/:\s*false\b/g, ': false')
+                .replace(/:\s*null\b/g, ': null');
             
             try {
                 const data = JSON.parse(jsonStr);
-                if (!data.title || !data.children) {
-                    throw new Error('JSON 缺少必要字段: title 或 children');
+                
+                // 验证数据结构
+                if (!data.title) {
+                    throw new Error('缺少根节点 title 字段');
                 }
+                if (!Array.isArray(data.children)) {
+                    throw new Error('children 必须是数组');
+                }
+                
+                // 递归验证子节点
+                validateNode(data);
+                
                 return data;
             } catch (error) {
                 console.error('JSON 解析失败:', error);
-                console.error('原始文本:', text);
-                console.error('提取的 JSON:', jsonStr);
-                throw error;
+                console.error('尝试解析的JSON:', jsonStr);
+                throw new Error(`JSON 格式错误: ${error.message}`);
+            }
+        }
+        
+        function validateNode(node) {
+            if (!node.title || typeof node.title !== 'string') {
+                throw new Error('每个节点必须有 title 字符串字段');
+            }
+            if (node.children) {
+                if (!Array.isArray(node.children)) {
+                    throw new Error('children 必须是数组，不能是其他类型');
+                }
+                node.children.forEach((child, index) => {
+                    if (typeof child !== 'object') {
+                        throw new Error(`children[${index}] 必须是对象，不能是 ${typeof child}`);
+                    }
+                    validateNode(child);
+                });
             }
         }
 
@@ -513,10 +559,10 @@ ${content}
             if (data.children && data.children.length > 0) {
                 const branchCount = data.children.length;
                 const angleStep = (2 * Math.PI) / branchCount;
-                const level1Distance = 180;
+                const level1Distance = 200;
 
                 data.children.forEach((child, index) => {
-                    const angle = angleStep * index - Math.PI / 2;
+                    const angle = angleStep * index;
                     const x = centerX + Math.cos(angle) * level1Distance;
                     const y = centerY + Math.sin(angle) * level1Distance;
 
@@ -527,13 +573,14 @@ ${content}
                     // 绘制二级分支
                     if (child.children && child.children.length > 0) {
                         const subBranchCount = child.children.length;
-                        const subAngleStep = (Math.PI * 0.8) / (subBranchCount + 1);
+                        const subAngleStep = (Math.PI * 1.2) / (subBranchCount + 1);
+                        const subDistance = 150;
 
                         child.children.forEach((subChild, subIndex) => {
+                            // 以当前分支的方向为基准，向两侧展开
                             const baseAngle = angle;
-                            const offsetAngle = -Math.PI * 0.4 + subAngleStep * (subIndex + 1);
+                            const offsetAngle = -Math.PI * 0.6 + subAngleStep * (subIndex + 1);
                             const subAngle = baseAngle + offsetAngle;
-                            const subDistance = 140;
 
                             const sx = x + Math.cos(subAngle) * subDistance;
                             const sy = y + Math.sin(subAngle) * subDistance;
@@ -553,12 +600,12 @@ ${content}
 
         function drawThirdLevel(x, y, children, parentAngle) {
             const childCount = children.length;
-            const angleStep = (Math.PI * 0.6) / (childCount + 1);
+            const angleStep = (Math.PI * 0.8) / (childCount + 1);
+            const distance = 120;
 
             children.forEach((child, index) => {
-                const offsetAngle = -Math.PI * 0.3 + angleStep * (index + 1);
+                const offsetAngle = -Math.PI * 0.4 + angleStep * (index + 1);
                 const angle = parentAngle + offsetAngle;
-                const distance = 100;
 
                 const cx = x + Math.cos(angle) * distance;
                 const cy = y + Math.sin(angle) * distance;
@@ -678,17 +725,4 @@ ${content}
             
             const countNodes = (node) => {
                 let count = 1;
-                if (node.children) {
-                    count += node.children.reduce((sum, child) => sum + countNodes(child), 0);
-                }
-                return count;
-            };
-            
-            const totalNodes = countNodes(data);
-            info += `节点总数: ${totalNodes}`;
-            
-            document.getElementById('mindInfo').textContent = info;
-        }
-    </script>
-</body>
-</html>
+                if
