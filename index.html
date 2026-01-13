@@ -446,16 +446,21 @@ ${content}
 
         function parseAIResponse(text) {
             try {
-                // 移除可能的 markdown 代码块
+                // 尝试更鲁棒地提取 JSON：
+                // 1) 去除任意代码块标记（``` 或 ```json）
+                // 2) 在剩余文本中查找第一个完整的 JSON 对象或数组并解析
                 let jsonStr = text.trim();
-                if (jsonStr.startsWith('```json')) {
-                    jsonStr = jsonStr.replace(/^```json\n/, '').replace(/\n```$/, '');
-                } else if (jsonStr.startsWith('```')) {
-                    jsonStr = jsonStr.replace(/^```\n/, '').replace(/\n```$/, '');
+                jsonStr = jsonStr.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+
+                // 提取第一个 {...} 或 [...] 块
+                const match = jsonStr.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                if (match) {
+                    jsonStr = match[1];
                 }
+
                 return JSON.parse(jsonStr);
             } catch (e) {
-                throw new Error('AI 响应格式错误，无法解析');
+                throw new Error('AI 响应格式错误，无法解析: ' + e.message);
             }
         }
 
