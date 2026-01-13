@@ -524,6 +524,7 @@ ${content}
                 // 尝试手动修复并重新解析
                 try {
                     const fixedJson = attemptRepairJSON(jsonStr);
+                    console.log('修复后的JSON:', fixedJson);
                     const data = JSON.parse(fixedJson);
                     validateAndCleanNode(data);
                     return data;
@@ -534,8 +535,13 @@ ${content}
         }
         
         function attemptRepairJSON(jsonStr) {
-            // 更激进的修复策略
             let repaired = jsonStr;
+            
+            // 修复多余的闭合括号 (如 }})
+            repaired = repaired.replace(/([}\]])\s*\1+/g, '$1');
+            
+            // 修复 }] 后面多余的 }
+            repaired = repaired.replace(/(\])\s*\}/g, '}');
             
             // 修复未闭合的字符串
             let quoteCount = 0;
