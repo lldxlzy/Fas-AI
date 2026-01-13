@@ -423,44 +423,74 @@ ${content}
         }
 
         async function callOllamaAPI(prompt) {
-            const response = await fetch(OLLAMA_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    model: MODEL_NAME,
-                    prompt: prompt,
-                    stream: false,
-                    temperature: 0.7,
-                })
-            });
+            try {
+                updateStatus('⏳ 正在调用 Ollama...');
+                
+                const response = await fetch(OLLAMA_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                        prompt: prompt,
+                        stream: false,
+                        temperature: 0.7
+                    })
+                });
 
-            if (!response.ok) {
-                throw new Error(`Ollama 连接失败: ${response.status}。请确保运行了 "ollama serve"`);
+                if (!response.ok) {
+                    throw new Error(`Ollama 返回错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (!data.response) {
+                    throw new Error('Ollama 未返回 response 字段');
+                }
+
+                const parsedData = parseAIResponse(data.response);
+                return parsedData;
+                
+            } catch (error) {
+                updateStatus('❌ Ollama 调用失败');
+                throw error;
             }
-
-            const data = await response.json();
-            return data.response;
         }
 
         function parseAIResponse(text) {
+            // 移除 markdown 代码块
+            text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+            
+            // 尝试提取 JSON 对象
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('未找到 JSON 对象');
+            }
+            
+            let jsonStr = jsonMatch[0];
+            
+            // 清理常见的 JSON 格式错误
+            jsonStr = jsonStr
+                .replace(/,\s*}/g, '}')           // 移除末尾多余逗号
+                .replace(/,\s*]/g, ']')           // 移除数组末尾多余逗号
+                .replace(/:\s*'/g, ':"')          // 单引号改双引号（值）
+                .replace(/'\s*,/g, '",')          // 单引号改双引号（值后逗号）
+                .replace(/'\s*}/g, '"}')          // 单引号改双引号（值后花括号）
+                .replace(/:\s*undefined/g, ': null')  // undefined 改 null
+                .replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":');  // 未加引号的 key 加引号
+            
             try {
-                // 尝试更鲁棒地提取 JSON：
-                // 1) 去除任意代码块标记（``` 或 ```json）
-                // 2) 在剩余文本中查找第一个完整的 JSON 对象或数组并解析
-                let jsonStr = text.trim();
-                jsonStr = jsonStr.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-
-                // 提取第一个 {...} 或 [...] 块
-                const match = jsonStr.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-                if (match) {
-                    jsonStr = match[1];
+                const data = JSON.parse(jsonStr);
+                if (!data.title || !data.children) {
+                    throw new Error('JSON 缺少必要字段: title 或 children');
                 }
-
-                return JSON.parse(jsonStr);
-            } catch (e) {
-                throw new Error('AI 响应格式错误，无法解析: ' + e.message);
+                return data;
+            } catch (error) {
+                console.error('JSON 解析失败:', error);
+                console.error('原始文本:', text);
+                console.error('提取的 JSON:', jsonStr);
+                throw error;
             }
         }
 
