@@ -499,7 +499,9 @@ ${content}
                 .replace(/:\s*undefined/g, ': null')       // undefined改null
                 .replace(/:\s*true\b/g, ': true')
                 .replace(/:\s*false\b/g, ': false')
-                .replace(/:\s*null\b/g, ': null');
+                .replace(/:\s*null\b/g, ': null')
+                .replace(/\n/g, ' ')                       // 换行改空格
+                .replace(/\s+/g, ' ');                     // 多个空格改单个空格
             
             try {
                 const data = JSON.parse(jsonStr);
@@ -512,30 +514,82 @@ ${content}
                     throw new Error('children 必须是数组');
                 }
                 
-                // 递归验证子节点
-                validateNode(data);
+                // 递归验证和清理子节点
+                validateAndCleanNode(data);
                 
                 return data;
             } catch (error) {
                 console.error('JSON 解析失败:', error);
                 console.error('尝试解析的JSON:', jsonStr);
-                throw new Error(`JSON 格式错误: ${error.message}`);
+                // 尝试手动修复并重新解析
+                try {
+                    const fixedJson = attemptRepairJSON(jsonStr);
+                    const data = JSON.parse(fixedJson);
+                    validateAndCleanNode(data);
+                    return data;
+                } catch (repairError) {
+                    throw new Error(`JSON 格式错误: ${error.message}`);
+                }
             }
         }
         
-        function validateNode(node) {
+        function attemptRepairJSON(jsonStr) {
+            // 更激进的修复策略
+            let repaired = jsonStr;
+            
+            // 修复未闭合的字符串
+            let quoteCount = 0;
+            for (let i = 0; i < repaired.length; i++) {
+                if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+                    quoteCount++;
+                }
+            }
+            if (quoteCount % 2 !== 0) {
+                repaired += '"';
+            }
+            
+            // 修复未闭合的括号
+            let braceCount = (repaired.match(/{/g) || []).length - (repaired.match(/}/g) || []).length;
+            for (let i = 0; i < braceCount; i++) {
+                repaired += '}';
+            }
+            
+            let bracketCount = (repaired.match(/\[/g) || []).length - (repaired.match(/\]/g) || []).length;
+            for (let i = 0; i < bracketCount; i++) {
+                repaired += ']';
+            }
+            
+            return repaired;
+        }
+        
+        function validateAndCleanNode(node) {
             if (!node.title || typeof node.title !== 'string') {
                 throw new Error('每个节点必须有 title 字符串字段');
             }
+            
+            // 清理 title
+            node.title = node.title.trim();
+            
             if (node.children) {
                 if (!Array.isArray(node.children)) {
-                    throw new Error('children 必须是数组，不能是其他类型');
-                }
-                node.children.forEach((child, index) => {
-                    if (typeof child !== 'object') {
-                        throw new Error(`children[${index}] 必须是对象，不能是 ${typeof child}`);
+                    // 如果 children 是对象，尝试转换
+                    if (typeof node.children === 'object') {
+                        node.children = Object.values(node.children);
+                    } else {
+                        throw new Error('children 必须是数组或对象');
                     }
-                    validateNode(child);
+                }
+                
+                // 过滤掉无效的子节点
+                node.children = node.children.filter(child => {
+                    return child && typeof child === 'object' && child.title;
+                });
+                
+                // 递归验证
+                node.children.forEach((child) => {
+                    if (typeof child === 'object') {
+                        validateAndCleanNode(child);
+                    }
                 });
             }
         }
@@ -725,4 +779,19 @@ ${content}
             
             const countNodes = (node) => {
                 let count = 1;
-                if
+                if (node.children && Array.isArray(node.children)) {
+                    node.children.forEach(child => {
+                        count += countNodes(child);
+                    });
+                }
+                return count;
+            };
+            
+            const totalCount = countNodes(data);
+            info += `节点总数: ${totalCount}`;
+            
+            document.getElementById('mindInfo').textContent = info;
+        }
+    </script>
+</body>
+</html>
