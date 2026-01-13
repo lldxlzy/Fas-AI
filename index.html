@@ -274,6 +274,7 @@
             <div class="controls">
                 <button class="btn-secondary btn-small" id="exportPng">📥 导出PNG</button>
                 <button class="btn-secondary btn-small" id="exportJson">💾 导出JSON</button>
+                <button class="btn-secondary btn-small" id="exportRawJson">📄 下载原始JSON</button>
             </div>
 
             <div class="mind-info" id="mindInfo">
@@ -300,6 +301,7 @@
 
         // ========== 全局变量 ==========
         let mindmapData = null;
+        let rawAIResponse = null;  // 保存原始 AI 响应
         let canvas = null;
         let ctx = null;
 
@@ -313,6 +315,7 @@
             document.getElementById('inputForm').addEventListener('submit', handleGenerate);
             document.getElementById('exportPng').addEventListener('click', exportPNG);
             document.getElementById('exportJson').addEventListener('click', exportJSON);
+            document.getElementById('exportRawJson').addEventListener('click', exportRawJSON);
 
             // 检查 Ollama 连接
             checkOllamaConnection();
@@ -367,6 +370,9 @@
             try {
                 const prompt = buildPrompt(subject, topic, content, depth);
                 const result = await callOllamaAPI(prompt);
+                
+                // 保存原始响应
+                rawAIResponse = result;
                 
                 mindmapData = parseAIResponse(result);
                 drawMindmap(mindmapData);
@@ -493,7 +499,7 @@ ${content}
             // 清理常见的 JSON 格式错误
             jsonStr = jsonStr
                 .replace(/,\s*}/g, '}')                    // 移除末尾逗号
-                .replace(/,\s*]/g, ']')                    // 移除数组末尾逗号
+                .replace(/,\s*]/g, ']')                    // 秘除数组末尾逗号
                 .replace(/:\s*'([^']*)'/g, ':"$1"')        // 单引号值改双引号
                 .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // key加引号
                 .replace(/:\s*undefined/g, ': null')       // undefined改null
@@ -799,6 +805,21 @@ ${content}
             link.download = `思维导图_${new Date().getTime()}.json`;
             link.click();
             showMessage('✅ JSON 导出成功', 'success');
+        }
+
+        function exportRawJSON() {
+            if (!rawAIResponse) {
+                showMessage('请先生成思维导图', 'error');
+                return;
+            }
+
+            // 直接导出原始 AI 响应
+            const blob = new Blob([rawAIResponse], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `原始JSON_${new Date().getTime()}.txt`;
+            link.click();
+            showMessage('✅ 原始JSON已下载', 'success');
         }
 
         // ========== UI 辅助函数 ==========
