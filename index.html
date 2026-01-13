@@ -464,8 +464,8 @@ ${content}
                     throw new Error('Ollama 未返回 response 字段');
                 }
 
-                const parsedData = parseAIResponse(data.response);
-                return parsedData;
+                // 返回响应文本，而不是已解析的对象
+                return data.response;
                 
             } catch (error) {
                 updateStatus('❌ Ollama 调用失败');
